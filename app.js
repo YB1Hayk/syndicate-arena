@@ -58,7 +58,7 @@ async function notifyAdmin(email) {
 
 const QUIZ = [
   {
-    question: 'Выходит Non-Farm Payrolls. Первая свеча — +80 пунктов вверх. Твоё действие?',
+    question: 'Выходит горячая новость. Первая свеча — +80 пунктов вверх. Твоё действие?',
     options: [
       { text: 'Жду откат к зоне пробоя и захожу на ретесте', type: 'АРХИТЕКТОР' },
       { text: 'Смотрю объёмы. Если слабеют — вхожу против',  type: 'СТРАТЕГ'    },
@@ -190,11 +190,27 @@ function goToScreen(n) {
 
 document.getElementById('btn-to-screen2').addEventListener('click', () => goToScreen(2));
 
-// ── Инициализация экрана 1 ───────────────────────────────────────
-(function init() {
+// ── Инициализация ────────────────────────────────────────────────
+// Запускается после полной загрузки всех обработчиков
+window.addEventListener('load', function init() {
   const savedType = localStorage.getItem('sa_psychotype');
-  const trialEnd  = localStorage.getItem('sa_trial_end');
+  const trialEnd  = Number(localStorage.getItem('sa_trial_end') || 0);
+  const verified  = localStorage.getItem('sa_verified');
 
+  // Если прошёл тест и верифицировал email — сразу в штаб
+  if (savedType && verified) {
+    // Восстанавливаем карточку в фоне (нужна для профиля)
+    const profile = PROFILES[savedType];
+    document.getElementById('card-badge').textContent = profile.badge;
+    document.getElementById('card-name').textContent  =
+      `АГЕНТ: ${localStorage.getItem('sa_name') || USER_NAME}`;
+    document.getElementById('card-desc').textContent  = profile.desc;
+    if (trialEnd) startTrialTimer(trialEnd);
+    goToScreen(4);
+    return;
+  }
+
+  // Если прошёл тест, но не верифицировал — показываем карточку
   if (savedType && trialEnd) {
     const profile = PROFILES[savedType];
     document.getElementById('card-badge').textContent = profile.badge;
@@ -203,17 +219,19 @@ document.getElementById('btn-to-screen2').addEventListener('click', () => goToSc
     document.getElementById('card-desc').textContent  = profile.desc;
     quizContainer.classList.add('hidden');
     traderCard.classList.remove('hidden');
-    startTrialTimer(Number(trialEnd));
-  } else {
-    renderQuestion();
+    startTrialTimer(trialEnd);
+    return;
   }
-})();
+
+  // Новый пользователь — запускаем тест
+  renderQuestion();
+});
 
 // ════════════════════════════════════════════
 //  ЭКРАН 2: ПОЛУЧИТЬ ОРУЖИЕ
 // ════════════════════════════════════════════
 
-const BROKER_URL = 'https://your-broker-referral-link.com';
+const BROKER_URL = 'https://fxproaffiliate.g2afse.com/click?pid=7274&offer_id=38&l=1773141291';
 
 const s2 = { brokerClicked: false, idVerified: false };
 
@@ -304,9 +322,7 @@ function updateNextButton() {
   if (s2.idVerified) {
     btnToScreen3.disabled = false;
     btnToScreen3.classList.remove('locked');
-    btnNextLabel.textContent = 'СЛЕДУЮЩАЯ МИССИЯ →';
-  } else if (s2.brokerClicked) {
-    btnNextLabel.textContent = 'ВВЕДИ ТОРГОВЫЙ ID ДЛЯ ПРОДОЛЖЕНИЯ';
+    btnToScreen3.classList.remove('hidden');
   }
 }
 
