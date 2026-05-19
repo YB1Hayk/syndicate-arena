@@ -490,14 +490,19 @@ const hqTrialLbl  = document.getElementById('hq-trial-label');
 const bottomNav   = document.querySelector('.bottom-nav');
 
 // ── Настройки новостей ───────────────────────────────────────────
-const RSS2JSON_API  = 'https://api.rss2json.com/v1/api.json?count=30&rss_url=';
-const NEWS_SOURCES  = [
-  'https://ru.investing.com/rss/news_25.rss',
-  'https://ru.investing.com/rss/news_14.rss',
+// CORS-прокси для обхода ограничений браузера
+const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+
+// Надёжные российские RSS-источники бизнес/финансовых новостей
+const NEWS_SOURCES = [
+  { url: 'https://rssexport.rbc.ru/rbcnews/news/30/full.rss', name: 'RBC' },
+  { url: 'https://www.bfm.ru/export/rss.xml',                name: 'Business FM' },
+  { url: 'https://lenta.ru/rss/articles/economics',          name: 'Lenta.ru' },
 ];
-const CACHE_KEY  = 'sa_news_data';
-const CACHE_TS   = 'sa_news_ts';
-const CACHE_TTL  = 60 * 60 * 1000; // 1 час
+
+const CACHE_KEY = 'sa_news_data';
+const CACHE_TS  = 'sa_news_ts';
+const CACHE_TTL = 60 * 60 * 1000; // 1 час
 
 // ── Ключевые слова для тегирования ──────────────────────────────
 const INSTRUMENT_TAGS = [
@@ -570,6 +575,27 @@ function openNews(encodedUrl) {
   if (tg) tg.openLink(url); else window.open(url, '_blank');
 }
 
+// ── Парсинг одного RSS через CORS-прокси ────────────────────────
+async function fetchRSS(source) {
+  const proxyUrl = CORS_PROXY + encodeURIComponent(source.url);
+  const res      = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+  const data     = await res.json();
+
+  const parser = new DOMParser();
+  const xml    = parser.parseFromString(data.contents, 'text/xml');
+  const items  = Array.from(xml.querySelectorAll('item'));
+
+  return items.slice(0, 20).map(item => {
+    const title = item.querySelector('title')?.textContent?.trim() || '';
+    const link  = item.querySelector('link')?.textContent?.trim()
+               || item.querySelector('guid')?.textContent?.trim() || '';
+    const date  = item.querySelector('pubDate')?.textContent || new Date().toISOString();
+    const desc  = item.querySelector('description')?.textContent || '';
+    const tag   = detectTag(title + ' ' + desc);
+    return { title, link, date, timeAgo: timeAgo(date), source: source.name, tag };
+  });
+}
+
 // ── Загрузка новостей ────────────────────────────────────────────
 async function fetchNews(force = false) {
   const feed        = document.getElementById('news-feed');
@@ -590,7 +616,7 @@ async function fetchNews(force = false) {
     return;
   }
 
-  // Показываем скелетоны
+  // Скелетоны
   feed.innerHTML = `
     <div class="news-skeleton"></div>
     <div class="news-skeleton"></div>
@@ -601,49 +627,44 @@ async function fetchNews(force = false) {
 
   try {
     const results = await Promise.allSettled(
-      NEWS_SOURCES.map(src =>
-        fetch(RSS2JSON_API + encodeURIComponent(src))
-          .then(r => r.json())
-      )
+      NEWS_SOURCES.map(src => fetchRSS(src))
     );
 
     const items = [];
     results.forEach(r => {
-      if (r.status === 'fulfilled' && r.value.items) {
-        r.value.items.forEach(item => {
-          const tag = detectTag((item.title || '') + ' ' + (item.description || ''));
-          items.push({
-            title:   item.title,
-            link:    item.link,
-            date:    item.pubDate,
-            timeAgo: timeAgo(item.pubDate),
-            source:  r.value.feed?.title || 'Investing.com',
-            tag,
-          });
-        });
-      }
+      if (r.status === 'fulfilled') items.push(...r.value);
     });
 
-    // Сортируем по дате, убираем дубли
+    if (!items.length) throw new Error('no items');
+
+    // Дедупликация и сортировка
     allNews = items
-      .filter((n, i, arr) => arr.findIndex(x => x.title === n.title) === i)
+      .filter((n, i, arr) => n.title && arr.findIndex(x => x.title === n.title) === i)
       .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 40);
+      .slice(0, 50);
 
     localStorage.setItem(CACHE_KEY, JSON.stringify(allNews));
-    localStorage.setItem(CACHE_TS,  Date.now());
+    localStorage.setItem(CACHE_TS,  String(Date.now()));
 
     renderNews(allNews);
     updateLabel.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
     setNextUpdateLabel(nextLabel);
 
   } catch (e) {
-    feed.innerHTML = `
-      <div class="news-error">
-        <div class="news-error-icon">📡</div>
-        Не удалось загрузить новости.<br>Проверь соединение и обнови.
-      </div>`;
-    updateLabel.textContent = 'Ошибка загрузки';
+    // Если кэш есть — показываем его даже если устарел
+    if (cachedData) {
+      allNews = JSON.parse(cachedData);
+      renderNews(allNews);
+      updateLabel.textContent = `Кэш: ${new Date(cachedTs).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+    } else {
+      feed.innerHTML = `
+        <div class="news-error">
+          <div class="news-error-icon">📡</div>
+          Не удалось загрузить новости.<br>
+          Проверь соединение и нажми ↻
+        </div>`;
+      updateLabel.textContent = 'Ошибка загрузки';
+    }
   }
 
   refreshBtn.classList.remove('spinning');
