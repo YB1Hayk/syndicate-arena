@@ -490,19 +490,17 @@ const hqTrialLbl  = document.getElementById('hq-trial-label');
 const bottomNav   = document.querySelector('.bottom-nav');
 
 // ── Настройки новостей ───────────────────────────────────────────
-// CORS-прокси для обхода ограничений браузера
-const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+const CORS_PROXY = 'https://corsproxy.io/?';
 
-// Надёжные российские RSS-источники бизнес/финансовых новостей
 const NEWS_SOURCES = [
-  { url: 'https://rssexport.rbc.ru/rbcnews/news/30/full.rss', name: 'RBC' },
-  { url: 'https://www.bfm.ru/export/rss.xml',                name: 'Business FM' },
-  { url: 'https://lenta.ru/rss/articles/economics',          name: 'Lenta.ru' },
+  { url: 'https://news.yandex.ru/business.rss',  name: 'Яндекс.Новости' },
+  { url: 'https://news.yandex.ru/markets.rss',   name: 'Яндекс.Маркеты' },
+  { url: 'https://news.yandex.ru/finances.rss',  name: 'Яндекс.Финансы' },
 ];
 
 const CACHE_KEY = 'sa_news_data';
 const CACHE_TS  = 'sa_news_ts';
-const CACHE_TTL = 60 * 60 * 1000; // 1 час
+const CACHE_TTL = 60 * 60 * 1000;
 
 // ── Ключевые слова для тегирования ──────────────────────────────
 const INSTRUMENT_TAGS = [
@@ -575,25 +573,35 @@ function openNews(encodedUrl) {
   if (tg) tg.openLink(url); else window.open(url, '_blank');
 }
 
+// ── Fetch с таймаутом ────────────────────────────────────────────
+function fetchWithTimeout(url, ms = 10000) {
+  return Promise.race([
+    fetch(url),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), ms)
+    ),
+  ]);
+}
+
 // ── Парсинг одного RSS через CORS-прокси ────────────────────────
 async function fetchRSS(source) {
   const proxyUrl = CORS_PROXY + encodeURIComponent(source.url);
-  const res      = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-  const data     = await res.json();
+  const res      = await fetchWithTimeout(proxyUrl, 10000);
+  const text     = await res.text();
 
   const parser = new DOMParser();
-  const xml    = parser.parseFromString(data.contents, 'text/xml');
+  const xml    = parser.parseFromString(text, 'text/xml');
   const items  = Array.from(xml.querySelectorAll('item'));
 
   return items.slice(0, 20).map(item => {
-    const title = item.querySelector('title')?.textContent?.trim() || '';
-    const link  = item.querySelector('link')?.textContent?.trim()
-               || item.querySelector('guid')?.textContent?.trim() || '';
-    const date  = item.querySelector('pubDate')?.textContent || new Date().toISOString();
-    const desc  = item.querySelector('description')?.textContent || '';
-    const tag   = detectTag(title + ' ' + desc);
+    const getEl  = tag => item.querySelector(tag)?.textContent?.trim() || '';
+    const title  = getEl('title');
+    const link   = getEl('link') || getEl('guid');
+    const date   = getEl('pubDate') || new Date().toISOString();
+    const desc   = getEl('description');
+    const tag    = detectTag(title + ' ' + desc);
     return { title, link, date, timeAgo: timeAgo(date), source: source.name, tag };
-  });
+  }).filter(n => n.title);
 }
 
 // ── Загрузка новостей ────────────────────────────────────────────
