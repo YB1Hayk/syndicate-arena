@@ -283,183 +283,47 @@
       </div>
     </div>
 
-    <div class="tab-nav">
-      <button class="tab-btn active" data-tab="impulses">
-        <span class="tab-icon">⚡</span> ИМПУЛЬСЫ
-      </button>
-      <button class="tab-btn" data-tab="memes">
-        <span class="tab-icon">💀</span> МЕМЫ
-      </button>
+    <!-- Шапка новостей -->
+    <div class="news-header-row">
+      <div class="news-update-info">
+        <span class="news-update-label" id="news-update-label">Загружаем новости...</span>
+        <span class="news-next-label" id="news-next-label"></span>
+      </div>
+      <button class="news-refresh-btn" id="news-refresh-btn" title="Обновить">↻</button>
     </div>
 
-    <!-- ВКЛАДКА: ИМПУЛЬСЫ -->
-    <div class="tab-content active" id="tab-impulses">
-
-      <p class="tab-subtitle">
-        Активы с остаточным движением после новостного импульса.
-        Обновляется перед ключевыми событиями.
-      </p>
-
-      <div class="asset-card" id="asset-gold">
-        <div class="asset-header">
-          <div class="asset-icon-wrap gold-bg">XAU</div>
-          <div class="asset-info">
-            <p class="asset-name">ЗОЛОТО <span class="asset-pair">XAU/USD</span></p>
-            <p class="asset-trigger">Триггер: NFP, CPI, ФРС</p>
-          </div>
-          <div class="asset-signal bullish">↑ ЛОНГ</div>
-        </div>
-        <div class="asset-body">
-          <p class="asset-tip">
-            <span class="tip-label">ТАКТИКА:</span>
-            После первой свечи вверх — ждём откат к пробитому уровню.
-            Вход на ретесте, стоп под свечой, цель: +60–120 пунктов.
-          </p>
-          <div class="asset-meta-row">
-            <span class="asset-meta">Волатильность: <b class="neon">ВЫСОКАЯ</b></span>
-            <span class="asset-meta">Спред: <b>1.8 pip</b></span>
-            <span class="asset-meta-tag active-tag">● АКТИВЕН</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="asset-card" id="asset-gas">
-        <div class="asset-header">
-          <div class="asset-icon-wrap gas-bg">GAS</div>
-          <div class="asset-info">
-            <p class="asset-name">ПРИРОДНЫЙ ГАЗ <span class="asset-pair">XNGUSD</span></p>
-            <p class="asset-trigger">Триггер: EIA Storage Report</p>
-          </div>
-          <div class="asset-signal bearish">↓ ШОРТ</div>
-        </div>
-        <div class="asset-body">
-          <p class="asset-tip">
-            <span class="tip-label">ТАКТИКА:</span>
-            Запасы выше прогноза → первая свеча вниз. Ждём коррекцию 38–50%,
-            вход на продажу, стоп выше тени свечи.
-          </p>
-          <div class="asset-meta-row">
-            <span class="asset-meta">Волатильность: <b class="neon">СРЕДНЯЯ</b></span>
-            <span class="asset-meta">Спред: <b>3.2 pip</b></span>
-            <span class="asset-meta-tag watch-tag">◎ СЛЕДИМ</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="asset-card" id="asset-oil">
-        <div class="asset-header">
-          <div class="asset-icon-wrap oil-bg">OIL</div>
-          <div class="asset-info">
-            <p class="asset-name">НЕФТЬ <span class="asset-pair">WTI/USD</span></p>
-            <p class="asset-trigger">Триггер: OPEC, DOE, Inventories</p>
-          </div>
-          <div class="asset-signal neutral">→ НЕЙТРАЛ</div>
-        </div>
-        <div class="asset-body">
-          <p class="asset-tip">
-            <span class="tip-label">ТАКТИКА:</span>
-            Сейчас флэт. Ждём выхода данных по запасам в среду.
-            До события — не входим. Подготовь уровни заранее.
-          </p>
-          <div class="asset-meta-row">
-            <span class="asset-meta">Волатильность: <b class="muted-text">НИЗКАЯ</b></span>
-            <span class="asset-meta">Спред: <b>2.5 pip</b></span>
-            <span class="asset-meta-tag wait-tag">⏳ ЖДЁМ</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="strategy-block">
-        <p class="strategy-title">⬡ МАНИФЕСТ СИНДИКАТА</p>
-        <p class="strategy-text">
-          Мы не заходим в первую секунду. Терминалы виснут — слабые сливают депозиты.
-          Пока рынок штормит, мы ждём. Первая свеча задала направление —
-          <span class="gold">мы забираем остаточное движение</span>.
-          Хладнокровно. Точно. Без эмоций.
-        </p>
-      </div>
-
+    <!-- Фильтры по инструментам -->
+    <div class="news-filters" id="news-filters">
+      <button class="filter-btn active" data-filter="all">ВСЕ</button>
+      <button class="filter-btn" data-filter="XAU">ЗОЛОТО</button>
+      <button class="filter-btn" data-filter="OIL">НЕФТЬ</button>
+      <button class="filter-btn" data-filter="USD">ДОЛЛАР</button>
+      <button class="filter-btn" data-filter="EUR">ЕВРО</button>
+      <button class="filter-btn" data-filter="FED">ФРС</button>
     </div>
 
-    <!-- ВКЛАДКА: МЕМЫ -->
-    <div class="tab-content" id="tab-memes">
+    <!-- Лента новостей -->
+    <div class="news-feed" id="news-feed">
+      <!-- Скелетоны загрузки -->
+      <div class="news-skeleton"></div>
+      <div class="news-skeleton"></div>
+      <div class="news-skeleton"></div>
+    </div>
 
-      <p class="tab-subtitle">
-        Постироничный трейдерский юмор. Для тех, кто понимает.
+    <!-- Манифест внизу -->
+    <div class="strategy-block" style="max-width:480px; width:100%; margin-bottom:80px;">
+      <p class="strategy-title">⬡ МАНИФЕСТ СИНДИКАТА</p>
+      <p class="strategy-text">
+        Первая свеча задала направление —
+        <span class="gold">мы забираем остаточное движение</span>.
+        Хладнокровно. Точно. Без эмоций.
       </p>
-
-      <div class="meme-card">
-        <div class="meme-top">
-          <span class="meme-emoji">📉</span>
-          <span class="meme-tag">КЛАССИКА</span>
-        </div>
-        <p class="meme-text">
-          "Куплю на хаях, продам на лоях" —<br>
-          <span class="gold">биография 90% розничных трейдеров</span>
-        </p>
-        <p class="meme-sub">Синдикат: сначала смотрим. Потом входим.</p>
-      </div>
-
-      <div class="meme-card">
-        <div class="meme-top">
-          <span class="meme-emoji">⚡</span>
-          <span class="meme-tag">NFP-ПЯТНИЦА</span>
-        </div>
-        <p class="meme-text">
-          Первая секунда NFP:<br>
-          <span class="neon">+150 пунктов за 0.3 секунды.</span><br>
-          Терминал завис. Стоп не сработал.
-        </p>
-        <p class="meme-sub">Мы в это время пьём кофе и ждём откат.</p>
-      </div>
-
-      <div class="meme-card">
-        <div class="meme-top">
-          <span class="meme-emoji">🧠</span>
-          <span class="meme-tag">ПСИХОЛОГИЯ</span>
-        </div>
-        <p class="meme-text">
-          "Рынок не прав" —<br>
-          <span class="gold">последние слова каждого,</span><br>
-          кто переставлял стоп.
-        </p>
-        <p class="meme-sub">Стоп — это не слабость. Это план.</p>
-      </div>
-
-      <div class="meme-card">
-        <div class="meme-top">
-          <span class="meme-emoji">🎯</span>
-          <span class="meme-tag">УТП СИНДИКАТА</span>
-        </div>
-        <p class="meme-text">
-          Пока все смотрят на первую свечу —<br>
-          <span class="neon">мы уже знаем, где она остановится.</span>
-        </p>
-        <p class="meme-sub">Остаточное движение. Наш хлеб.</p>
-      </div>
-
-      <div class="meme-card">
-        <div class="meme-top">
-          <span class="meme-emoji">💀</span>
-          <span class="meme-tag">ГОРЬКАЯ ПРАВДА</span>
-        </div>
-        <p class="meme-text">
-          Депозит $200 → торгую 1 лот.<br>
-          <span class="gold">Margin call через 47 минут.</span><br>
-          "Но ведь сигнал был точный..."
-        </p>
-        <p class="meme-sub">Управление капиталом важнее точки входа.</p>
-      </div>
-
     </div>
 
     <!-- Нижняя навигация -->
     <div class="bottom-nav">
-      <button class="bottom-nav-btn active" data-tab="impulses">
-        <span>⚡</span><span>Импульсы</span>
-      </button>
-      <button class="bottom-nav-btn" data-tab="memes">
-        <span>💀</span><span>Мемы</span>
+      <button class="bottom-nav-btn active" id="btn-nav-news">
+        <span>📰</span><span>Новости</span>
       </button>
       <button class="bottom-nav-btn" id="btn-profile">
         <span>👤</span><span>Профиль</span>

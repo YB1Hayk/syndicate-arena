@@ -480,7 +480,7 @@ function restoreScreen3() {
 window.addEventListener('screen-change', (e) => { if (e.detail === 3) restoreScreen3(); });
 
 // ════════════════════════════════════════════
-//  ЭКРАН 4: ШТАБ
+//  ЭКРАН 4: ШТАБ — НОВОСТИ
 // ════════════════════════════════════════════
 
 const hqUsername  = document.getElementById('hq-username');
@@ -489,21 +489,197 @@ const hqTrialPill = document.getElementById('hq-trial-pill');
 const hqTrialLbl  = document.getElementById('hq-trial-label');
 const bottomNav   = document.querySelector('.bottom-nav');
 
-function initTabs() {
-  const tabBtns     = document.querySelectorAll('.tab-btn');
-  const tabContents = document.querySelectorAll('.tab-content');
-  const bottomBtns  = document.querySelectorAll('.bottom-nav-btn[data-tab]');
+// ── Настройки новостей ───────────────────────────────────────────
+const RSS2JSON_API  = 'https://api.rss2json.com/v1/api.json?count=30&rss_url=';
+const NEWS_SOURCES  = [
+  'https://ru.investing.com/rss/news_25.rss',
+  'https://ru.investing.com/rss/news_14.rss',
+];
+const CACHE_KEY  = 'sa_news_data';
+const CACHE_TS   = 'sa_news_ts';
+const CACHE_TTL  = 60 * 60 * 1000; // 1 час
 
-  function switchTab(name) {
-    tabBtns.forEach(b     => b.classList.toggle('active', b.dataset.tab === name));
-    tabContents.forEach(c => c.classList.toggle('active', c.id === `tab-${name}`));
-    bottomBtns.forEach(b  => b.classList.toggle('active', b.dataset.tab === name));
+// ── Ключевые слова для тегирования ──────────────────────────────
+const INSTRUMENT_TAGS = [
+  { key: 'XAU', words: ['золото', 'xau', 'gold', 'слитки'] },
+  { key: 'OIL', words: ['нефть', 'wti', 'brent', 'oil', 'opec', 'опек', 'баррель'] },
+  { key: 'GAS', words: ['газ', 'natural gas', 'lng', 'спг'] },
+  { key: 'FED', words: ['фрс', 'fed', 'пауэлл', 'powell', 'федрезерв', 'ставка сша'] },
+  { key: 'CPI', words: ['инфляция', 'cpi', 'pce', 'inflation', 'индекс цен'] },
+  { key: 'EUR', words: ['евро', 'eur', 'ecb', 'ецб', 'еврозона', 'лагард'] },
+  { key: 'GBP', words: ['фунт', 'gbp', 'boe', 'банк англии'] },
+  { key: 'USD', words: ['доллар', 'usd', 'dxy', 'индекс доллара'] },
+];
+
+let allNews        = [];
+let activeFilter   = 'all';
+let newsInitDone   = false;
+
+// ── Определяем тег инструмента по тексту ────────────────────────
+function detectTag(text) {
+  const lower = text.toLowerCase();
+  for (const inst of INSTRUMENT_TAGS) {
+    if (inst.words.some(w => lower.includes(w))) return inst.key;
   }
-
-  tabBtns.forEach(btn    => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-  bottomBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  return 'NEWS';
 }
 
+// ── Время "назад" ────────────────────────────────────────────────
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const d = Math.floor(diff / 86400000);
+  if (m < 1)  return 'только что';
+  if (m < 60) return `${m} мин назад`;
+  if (h < 24) return `${h} ч назад`;
+  return `${d} д назад`;
+}
+
+// ── Рендер карточек новостей ─────────────────────────────────────
+function renderNews(items) {
+  const feed = document.getElementById('news-feed');
+  const filtered = activeFilter === 'all'
+    ? items
+    : items.filter(n => n.tag === activeFilter);
+
+  if (!filtered.length) {
+    feed.innerHTML = `
+      <div class="news-error">
+        <div class="news-error-icon">📭</div>
+        По этому фильтру новостей нет.<br>Попробуй другой инструмент.
+      </div>`;
+    return;
+  }
+
+  feed.innerHTML = filtered.map(n => `
+    <div class="news-card" onclick="openNews('${encodeURIComponent(n.link)}')">
+      <div class="news-card-top">
+        <span class="news-instrument-tag tag-${n.tag}">${n.tag}</span>
+        <span class="news-time">${n.timeAgo}</span>
+      </div>
+      <div class="news-title">${n.title}</div>
+      <div class="news-source">${n.source}</div>
+    </div>
+  `).join('');
+}
+
+// ── Открытие новости ─────────────────────────────────────────────
+function openNews(encodedUrl) {
+  const url = decodeURIComponent(encodedUrl);
+  if (tg) tg.openLink(url); else window.open(url, '_blank');
+}
+
+// ── Загрузка новостей ────────────────────────────────────────────
+async function fetchNews(force = false) {
+  const feed        = document.getElementById('news-feed');
+  const refreshBtn  = document.getElementById('news-refresh-btn');
+  const updateLabel = document.getElementById('news-update-label');
+  const nextLabel   = document.getElementById('news-next-label');
+
+  // Проверяем кэш
+  const cachedTs   = Number(localStorage.getItem(CACHE_TS) || 0);
+  const cachedData = localStorage.getItem(CACHE_KEY);
+  const age        = Date.now() - cachedTs;
+
+  if (!force && cachedData && age < CACHE_TTL) {
+    allNews = JSON.parse(cachedData);
+    renderNews(allNews);
+    updateLabel.textContent = `Обновлено: ${new Date(cachedTs).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+    setNextUpdateLabel(nextLabel);
+    return;
+  }
+
+  // Показываем скелетоны
+  feed.innerHTML = `
+    <div class="news-skeleton"></div>
+    <div class="news-skeleton"></div>
+    <div class="news-skeleton"></div>
+    <div class="news-skeleton"></div>`;
+  refreshBtn.classList.add('spinning');
+  updateLabel.textContent = 'Загружаем новости...';
+
+  try {
+    const results = await Promise.allSettled(
+      NEWS_SOURCES.map(src =>
+        fetch(RSS2JSON_API + encodeURIComponent(src))
+          .then(r => r.json())
+      )
+    );
+
+    const items = [];
+    results.forEach(r => {
+      if (r.status === 'fulfilled' && r.value.items) {
+        r.value.items.forEach(item => {
+          const tag = detectTag((item.title || '') + ' ' + (item.description || ''));
+          items.push({
+            title:   item.title,
+            link:    item.link,
+            date:    item.pubDate,
+            timeAgo: timeAgo(item.pubDate),
+            source:  r.value.feed?.title || 'Investing.com',
+            tag,
+          });
+        });
+      }
+    });
+
+    // Сортируем по дате, убираем дубли
+    allNews = items
+      .filter((n, i, arr) => arr.findIndex(x => x.title === n.title) === i)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 40);
+
+    localStorage.setItem(CACHE_KEY, JSON.stringify(allNews));
+    localStorage.setItem(CACHE_TS,  Date.now());
+
+    renderNews(allNews);
+    updateLabel.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+    setNextUpdateLabel(nextLabel);
+
+  } catch (e) {
+    feed.innerHTML = `
+      <div class="news-error">
+        <div class="news-error-icon">📡</div>
+        Не удалось загрузить новости.<br>Проверь соединение и обнови.
+      </div>`;
+    updateLabel.textContent = 'Ошибка загрузки';
+  }
+
+  refreshBtn.classList.remove('spinning');
+}
+
+// ── Метка следующего обновления (12:00 МСК) ─────────────────────
+function setNextUpdateLabel(el) {
+  const now    = new Date();
+  const msk    = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+  const next   = new Date(msk);
+  next.setHours(12, 0, 0, 0);
+  if (msk >= next) next.setDate(next.getDate() + 1);
+  const diffH  = Math.round((next - msk) / 3600000);
+  el.textContent = diffH < 1
+    ? 'Следующее обновление — скоро'
+    : `Следующее обновление через ~${diffH} ч`;
+}
+
+// ── Фильтры ─────────────────────────────────────────────────────
+function initFilters() {
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = btn.dataset.filter;
+      renderNews(allNews);
+    });
+  });
+}
+
+// ── Кнопка обновления ────────────────────────────────────────────
+document.getElementById('news-refresh-btn').addEventListener('click', () => {
+  fetchNews(true);
+});
+
+// ── Инициализация штаба ──────────────────────────────────────────
 function initHQ() {
   const name     = localStorage.getItem('sa_name')     || USER_NAME;
   const level    = localStorage.getItem('sa_level')    || 'ТРИАЛ';
@@ -521,7 +697,12 @@ function initHQ() {
   }
 
   bottomNav.classList.add('visible');
-  initTabs();
+
+  if (!newsInitDone) {
+    initFilters();
+    newsInitDone = true;
+  }
+  fetchNews();
 }
 
 function formatTrialShort(endTs) {
@@ -532,11 +713,12 @@ function formatTrialShort(endTs) {
   return `${d}Д ${h}Ч`;
 }
 
+// ── Профиль ──────────────────────────────────────────────────────
 document.getElementById('btn-profile').addEventListener('click', () => {
   const psychotype = localStorage.getItem('sa_psychotype') || '—';
   const level      = localStorage.getItem('sa_level')      || 'ТРИАЛ';
-  const email   = localStorage.getItem('sa_email')   || '—';
-  const deposit = localStorage.getItem('sa_deposit')  || '0';
+  const email      = localStorage.getItem('sa_email')      || '—';
+  const deposit    = localStorage.getItem('sa_deposit')    || '0';
 
   if (tg) {
     tg.showPopup({
