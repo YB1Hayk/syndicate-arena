@@ -490,12 +490,21 @@ const hqTrialLbl  = document.getElementById('hq-trial-label');
 const bottomNav   = document.querySelector('.bottom-nav');
 
 // ── Настройки новостей ───────────────────────────────────────────
-// Статический файл генерируется GitHub Actions каждые 3 часа
-const NEWS_JSON_URL = './news.json';
+const NEWS_JSON_URL = 'https://yb1hayk.github.io/syndicate-arena/news.json';
 
 const CACHE_KEY = 'sa_news_data';
 const CACHE_TS  = 'sa_news_ts';
 const CACHE_TTL = 60 * 60 * 1000;
+
+// ── Резервные новости (показываются если fetch не работает) ──────
+const FALLBACK_NEWS = [
+  { title: 'Золото держится выше $3300 на фоне неопределённости по ставке ФРС', link: '', date: new Date().toISOString(), timeAgo: 'сегодня', source: 'Синдикат', tag: 'XAU' },
+  { title: 'Нефть Brent снижается: ОПЕК+ обсуждает увеличение добычи', link: '', date: new Date().toISOString(), timeAgo: 'сегодня', source: 'Синдикат', tag: 'OIL' },
+  { title: 'Доллар укрепляется перед выходом данных по инфляции в США', link: '', date: new Date().toISOString(), timeAgo: 'сегодня', source: 'Синдикат', tag: 'USD' },
+  { title: 'ФРС: члены комитета расходятся во мнениях о сроках снижения ставки', link: '', date: new Date().toISOString(), timeAgo: 'сегодня', source: 'Синдикат', tag: 'FED' },
+  { title: 'Евро слабеет после выхода данных по ВВП еврозоны', link: '', date: new Date().toISOString(), timeAgo: 'сегодня', source: 'Синдикат', tag: 'EUR' },
+  { title: 'Природный газ: запасы в США выше ожиданий, цены под давлением', link: '', date: new Date().toISOString(), timeAgo: 'сегодня', source: 'Синдикат', tag: 'GAS' },
+];
 
 // ── Ключевые слова для тегирования ──────────────────────────────
 const INSTRUMENT_TAGS = [
@@ -568,7 +577,15 @@ function openNews(encodedUrl) {
   if (tg) tg.openLink(url); else window.open(url, '_blank');
 }
 
-// ── Загрузка новостей из статического файла ─────────────────────
+// ── Fetch с жёстким таймаутом 6 сек ─────────────────────────────
+function fetchWithTimeout(url, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
+// ── Загрузка новостей ────────────────────────────────────────────
 async function fetchNews(force = false) {
   const feed        = document.getElementById('news-feed');
   const refreshBtn  = document.getElementById('news-refresh-btn');
@@ -579,54 +596,53 @@ async function fetchNews(force = false) {
   const cachedData = localStorage.getItem(CACHE_KEY);
   const age        = Date.now() - cachedTs;
 
+  // Показываем кэш мгновенно, обновляем в фоне если нужно
   if (!force && cachedData && age < CACHE_TTL) {
-    allNews = JSON.parse(cachedData);
-    renderNews(allNews);
-    updateLabel.textContent = `Обновлено: ${new Date(cachedTs).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
-    setNextUpdateLabel(nextLabel);
-    return;
+    try {
+      allNews = JSON.parse(cachedData);
+      renderNews(allNews);
+      updateLabel.textContent = `Обновлено: ${new Date(cachedTs).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+      setNextUpdateLabel(nextLabel);
+      return;
+    } catch (_) {}
   }
 
   feed.innerHTML = `
     <div class="news-skeleton"></div>
     <div class="news-skeleton"></div>
-    <div class="news-skeleton"></div>
     <div class="news-skeleton"></div>`;
   refreshBtn.classList.add('spinning');
-  updateLabel.textContent = 'Загружаем новости...';
+  updateLabel.textContent = 'Загружаем...';
 
   try {
-    const res  = await fetch(NEWS_JSON_URL + '?t=' + Date.now());
+    const res  = await fetchWithTimeout(NEWS_JSON_URL + '?v=' + Date.now(), 6000);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    if (!data.items || !data.items.length) throw new Error('empty');
 
-    // Пересчитываем "N мин назад" свежо
-    allNews = data.items.map(n => ({
-      ...n,
-      timeAgo: timeAgo(n.date),
-    }));
-
+    allNews = data.items.map(n => ({ ...n, timeAgo: timeAgo(n.date) }));
     localStorage.setItem(CACHE_KEY, JSON.stringify(allNews));
     localStorage.setItem(CACHE_TS,  String(Date.now()));
-
     renderNews(allNews);
     updateLabel.textContent = `Обновлено: ${data.updated}`;
     setNextUpdateLabel(nextLabel);
 
   } catch (e) {
+    // Пробуем кэш
     if (cachedData) {
-      allNews = JSON.parse(cachedData);
-      renderNews(allNews);
-      updateLabel.textContent = 'Из кэша';
-    } else {
-      feed.innerHTML = `
-        <div class="news-error">
-          <div class="news-error-icon">⏳</div>
-          Новости ещё не загружены.<br>
-          Первая загрузка произойдёт автоматически<br>
-          в <b>06:00</b> и <b>12:00 МСК</b>.
-        </div>`;
-      updateLabel.textContent = 'Ожидание обновления';
+      try {
+        allNews = JSON.parse(cachedData);
+        renderNews(allNews);
+        updateLabel.textContent = 'Из кэша';
+        setNextUpdateLabel(nextLabel);
+        refreshBtn.classList.remove('spinning');
+        return;
+      } catch (_) {}
     }
+    // Показываем резервные новости
+    allNews = FALLBACK_NEWS;
+    renderNews(allNews);
+    updateLabel.textContent = 'Демо-данные Синдиката';
   }
 
   refreshBtn.classList.remove('spinning');
