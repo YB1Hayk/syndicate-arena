@@ -490,13 +490,8 @@ const hqTrialLbl  = document.getElementById('hq-trial-label');
 const bottomNav   = document.querySelector('.bottom-nav');
 
 // ── Настройки новостей ───────────────────────────────────────────
-const CORS_PROXY = 'https://corsproxy.io/?';
-
-const NEWS_SOURCES = [
-  { url: 'https://news.yandex.ru/business.rss',  name: 'Яндекс.Новости' },
-  { url: 'https://news.yandex.ru/markets.rss',   name: 'Яндекс.Маркеты' },
-  { url: 'https://news.yandex.ru/finances.rss',  name: 'Яндекс.Финансы' },
-];
+// Статический файл генерируется GitHub Actions каждые 3 часа
+const NEWS_JSON_URL = './news.json';
 
 const CACHE_KEY = 'sa_news_data';
 const CACHE_TS  = 'sa_news_ts';
@@ -573,45 +568,13 @@ function openNews(encodedUrl) {
   if (tg) tg.openLink(url); else window.open(url, '_blank');
 }
 
-// ── Fetch с таймаутом ────────────────────────────────────────────
-function fetchWithTimeout(url, ms = 10000) {
-  return Promise.race([
-    fetch(url),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), ms)
-    ),
-  ]);
-}
-
-// ── Парсинг одного RSS через CORS-прокси ────────────────────────
-async function fetchRSS(source) {
-  const proxyUrl = CORS_PROXY + encodeURIComponent(source.url);
-  const res      = await fetchWithTimeout(proxyUrl, 10000);
-  const text     = await res.text();
-
-  const parser = new DOMParser();
-  const xml    = parser.parseFromString(text, 'text/xml');
-  const items  = Array.from(xml.querySelectorAll('item'));
-
-  return items.slice(0, 20).map(item => {
-    const getEl  = tag => item.querySelector(tag)?.textContent?.trim() || '';
-    const title  = getEl('title');
-    const link   = getEl('link') || getEl('guid');
-    const date   = getEl('pubDate') || new Date().toISOString();
-    const desc   = getEl('description');
-    const tag    = detectTag(title + ' ' + desc);
-    return { title, link, date, timeAgo: timeAgo(date), source: source.name, tag };
-  }).filter(n => n.title);
-}
-
-// ── Загрузка новостей ────────────────────────────────────────────
+// ── Загрузка новостей из статического файла ─────────────────────
 async function fetchNews(force = false) {
   const feed        = document.getElementById('news-feed');
   const refreshBtn  = document.getElementById('news-refresh-btn');
   const updateLabel = document.getElementById('news-update-label');
   const nextLabel   = document.getElementById('news-next-label');
 
-  // Проверяем кэш
   const cachedTs   = Number(localStorage.getItem(CACHE_TS) || 0);
   const cachedData = localStorage.getItem(CACHE_KEY);
   const age        = Date.now() - cachedTs;
@@ -624,7 +587,6 @@ async function fetchNews(force = false) {
     return;
   }
 
-  // Скелетоны
   feed.innerHTML = `
     <div class="news-skeleton"></div>
     <div class="news-skeleton"></div>
@@ -634,44 +596,36 @@ async function fetchNews(force = false) {
   updateLabel.textContent = 'Загружаем новости...';
 
   try {
-    const results = await Promise.allSettled(
-      NEWS_SOURCES.map(src => fetchRSS(src))
-    );
+    const res  = await fetch(NEWS_JSON_URL + '?t=' + Date.now());
+    const data = await res.json();
 
-    const items = [];
-    results.forEach(r => {
-      if (r.status === 'fulfilled') items.push(...r.value);
-    });
-
-    if (!items.length) throw new Error('no items');
-
-    // Дедупликация и сортировка
-    allNews = items
-      .filter((n, i, arr) => n.title && arr.findIndex(x => x.title === n.title) === i)
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 50);
+    // Пересчитываем "N мин назад" свежо
+    allNews = data.items.map(n => ({
+      ...n,
+      timeAgo: timeAgo(n.date),
+    }));
 
     localStorage.setItem(CACHE_KEY, JSON.stringify(allNews));
     localStorage.setItem(CACHE_TS,  String(Date.now()));
 
     renderNews(allNews);
-    updateLabel.textContent = `Обновлено: ${new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+    updateLabel.textContent = `Обновлено: ${data.updated}`;
     setNextUpdateLabel(nextLabel);
 
   } catch (e) {
-    // Если кэш есть — показываем его даже если устарел
     if (cachedData) {
       allNews = JSON.parse(cachedData);
       renderNews(allNews);
-      updateLabel.textContent = `Кэш: ${new Date(cachedTs).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})}`;
+      updateLabel.textContent = 'Из кэша';
     } else {
       feed.innerHTML = `
         <div class="news-error">
-          <div class="news-error-icon">📡</div>
-          Не удалось загрузить новости.<br>
-          Проверь соединение и нажми ↻
+          <div class="news-error-icon">⏳</div>
+          Новости ещё не загружены.<br>
+          Первая загрузка произойдёт автоматически<br>
+          в <b>06:00</b> и <b>12:00 МСК</b>.
         </div>`;
-      updateLabel.textContent = 'Ошибка загрузки';
+      updateLabel.textContent = 'Ожидание обновления';
     }
   }
 

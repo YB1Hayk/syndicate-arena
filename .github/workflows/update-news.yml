@@ -1,0 +1,28 @@
+name: Update News Feed
+
+on:
+  schedule:
+    - cron: '0 9 * * *'   # 12:00 МСК (UTC+3 = 09:00 UTC)
+    - cron: '0 3 * * *'   # 06:00 МСК — утреннее обновление
+  workflow_dispatch:        # Ручной запуск из GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch RSS and generate news.json
+        run: python3 fetch_news.py
+
+      - name: Commit and push news.json
+        run: |
+          git config user.name  "syndicate-news-bot"
+          git config user.email "bot@syndicate-arena.io"
+          git add news.json
+          git diff --staged --quiet || git commit -m "chore: update news feed"
+          git push
