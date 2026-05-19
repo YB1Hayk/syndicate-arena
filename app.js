@@ -365,31 +365,23 @@ const DEPOSIT_LEVELS = [
   { id: 'level-elite',   min: 500, max: Infinity, label: 'ELITE'   },
 ];
 
-const btnBack2         = document.getElementById('btn-back-2');
-const ammoFill         = document.getElementById('ammo-fill');
-const ammoGlow         = document.getElementById('ammo-glow');
-const ammoAmount       = document.getElementById('ammo-amount');
-const unlockStatus     = document.getElementById('unlock-status');
-const unlockIcon       = document.getElementById('unlock-icon');
-const unlockText       = document.getElementById('unlock-text');
-const inputDeposit     = document.getElementById('input-deposit');
-const btnConfirmDep    = document.getElementById('btn-confirm-deposit');
-const btnDepositBroker = document.getElementById('btn-deposit-broker');
-const btnToScreen4     = document.getElementById('btn-to-screen4');
-const btnS4Label       = document.getElementById('btn-s4-label');
-const btnSkipDeposit   = document.getElementById('btn-skip-deposit');
+const btnBack2      = document.getElementById('btn-back-2');
+const ammoFill      = document.getElementById('ammo-fill');
+const ammoGlow      = document.getElementById('ammo-glow');
+const ammoAmount    = document.getElementById('ammo-amount');
+const unlockStatus  = document.getElementById('unlock-status');
+const unlockIcon    = document.getElementById('unlock-icon');
+const unlockText    = document.getElementById('unlock-text');
+const inputDeposit  = document.getElementById('input-deposit');
+const btnConfirmDep = document.getElementById('btn-confirm-deposit');
+const btnToScreen4  = document.getElementById('btn-to-screen4');
+const btnS4Label    = document.getElementById('btn-s4-label');
+const btnSkipDeposit = document.getElementById('btn-skip-deposit');
 
 let currentDeposit = Number(localStorage.getItem('sa_deposit') || 0);
 
 btnBack2.addEventListener('click', () => goToScreen(2));
 
-btnDepositBroker.addEventListener('click', () => {
-  const url = 'https://your-broker-deposit-link.com';
-  if (tg) tg.openLink(url); else window.open(url, '_blank');
-  btnDepositBroker.innerHTML = '<span class="btn-broker-icon">✓</span> ПЕРЕХОД К ПОПОЛНЕНИЮ';
-  btnDepositBroker.style.borderColor = 'var(--gold-dim)';
-  btnDepositBroker.style.color = 'var(--gold)';
-});
 
 btnConfirmDep.addEventListener('click', () => {
   const val = Number(inputDeposit.value);
